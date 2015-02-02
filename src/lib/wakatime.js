@@ -240,7 +240,7 @@ function convertThis() {
                 }
               } else {
                 if (metric === "grand_total") {
-                  db.run("INSERT OR REPLACE INTO wakatime VALUES (?, ?, ?, ?)", [current_day, metric, metric_data.name, metric_data.total_seconds]);
+                  db.run("INSERT OR REPLACE INTO wakatime VALUES (?, ?, ?, ?)", [current_day, metric, "", metric_data.total_seconds]);
                 }
               }
             }
