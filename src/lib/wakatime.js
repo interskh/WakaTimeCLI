@@ -211,11 +211,10 @@ function convertThis() {
     })
   };
 
-  // save yesterday's data to db
-  var save = function(day){
-    console.log(day);
+  // save a week's data to db
+  var save = function(day, day2){
     var apiKey = readApiKey();
-    request("https://wakatime.com/api/v1/summary/daily?start="+day+"&end="+day+"&api_key="+apiKey, function (error, response, body) {
+    request("https://wakatime.com/api/v1/summary/daily?start="+day+"&end="+day2+"&api_key="+apiKey, function (error, response, body) {
       if (!error && response.statusCode == 200) {
         var body = JSON.parse(body);
         var exists = fs.existsSync(wakadb);
@@ -223,18 +222,26 @@ function convertThis() {
         var db = new sqlite3.Database(wakadb);
         db.serialize(function() {
           if (!exists) {
-            db.run("CREATE TABLE wakatime (dt VARCHAR(10), metric VARCHAR(10), key TEXT, val INT)");
+            db.run("CREATE TABLE wakatime (" +
+                      "dt VARCHAR(10)," +
+                      "metric VARCHAR(10)," +
+                      "key TEXT," +
+                      "val INT," +
+                      "PRIMARY KEY (dt, metric, key));");
           }
-          for (var metric in body.data[0]) {
-            var metric_data = body.data[0][metric];
-            if (Array.isArray(metric_data)) {
-              for (var i=0; i<metric_data.length; i++) {
-                var d = metric_data[i];
-                db.run("INSERT INTO wakatime VALUES (?, ?, ?, ?)", [day, metric, d.name, d.total_seconds]);
-              }
-            } else {
-              if (metric_data === "grand_total") {
-                db.run("INSERT INTO wakatime VALUES (?, ?, ?, ?)", [day, metric, metric_data.name, metric_data.total_seconds]);
+          for (var d=0; d<body.data.length; d++) {
+            var current_day = body.data[d].range.date;
+            for (var metric in body.data[d]) {
+              var metric_data = body.data[d][metric];
+              if (Array.isArray(metric_data)) {
+                for (var i=0; i<metric_data.length; i++) {
+                  var data = metric_data[i];
+                  db.run("INSERT OR REPLACE INTO wakatime VALUES (?, ?, ?, ?)", [current_day, metric, data.name, data.total_seconds]);
+                }
+              } else {
+                if (metric === "grand_total") {
+                  db.run("INSERT OR REPLACE INTO wakatime VALUES (?, ?, ?, ?)", [current_day, metric, metric_data.name, metric_data.total_seconds]);
+                }
               }
             }
           }
@@ -268,7 +275,7 @@ function convertThis() {
       week(day.week, "Week", day.day);
     } else if(val === '-s' || val === '--save') {
       var day = todaysDate();
-      save(day.yesterday);
+      save(day.week, day.yesterday);
     } else if(val === '-u' || val === '-user') {
       user();
     } else if(val === '-help') {
