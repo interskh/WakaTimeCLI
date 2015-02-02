@@ -33,6 +33,11 @@ Display WakaTime data from the last 7 days:
 $ wakatime -w or $ wakatime -week
 ```
 
+Saves data to local sqlite db:
+```shell
+$ wakatime -s or $ wakatime --save
+```
+
 ###Info
 
 Written using the WakaTime API (https://wakatime.com/api).
