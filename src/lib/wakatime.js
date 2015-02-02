@@ -1,3 +1,4 @@
+require('date-utils');
 var fs = require('fs');
 
 function convertThis() {
@@ -16,6 +17,7 @@ function convertThis() {
   var apiString = '?api_key=';
   var homedir = (process.platform === 'win32') ? process.env.HOMEPATH : process.env.HOME;
   var wakafile = homedir + '/.wakafile';
+  var wakadb = homedir + '/.wakatime.sqlite3';
 
   // Stores API Key in app directory'
   var setApiKey = function(apiKey){
@@ -51,24 +53,12 @@ function convertThis() {
 
   // Date function used to format date on API request
   var todaysDate = function(){
-    var day = new Date();
-    var dd = day.getDate();
-    var dd2 = dd-1;
-    var dd3 = dd-6;
-    var mm = day.getMonth()+1; //January is 0!
-    var yyyy = day.getFullYear();
-
-    if(dd<10) {
-      dd='0'+dd
-    } 
-    if(mm<10) {
-      mm='0'+mm
-    } 
+    format = "MM/DD/YYYY";
 
     return {
-      day: mm+'/'+dd+'/'+yyyy,
-      yesterday: mm+'/'+dd2+'/'+yyyy,
-      week: mm+'/'+dd3+'/'+yyyy
+      day: Date.today().toFormat(format),
+      yesterday: Date.yesterday().toFormat(format),
+      week: Date.today().removeDays(6).toFormat(format)
     }
   };
 
@@ -221,6 +211,42 @@ function convertThis() {
     })
   };
 
+  // save yesterday's data to db
+  var save = function(day){
+    console.log(day);
+    var apiKey = readApiKey();
+    request("https://wakatime.com/api/v1/summary/daily?start="+day+"&end="+day+"&api_key="+apiKey, function (error, response, body) {
+      if (!error && response.statusCode == 200) {
+        var body = JSON.parse(body);
+        var exists = fs.existsSync(wakadb);
+        var sqlite3 = require('sqlite3').verbose();
+        var db = new sqlite3.Database(wakadb);
+        db.serialize(function() {
+          if (!exists) {
+            db.run("CREATE TABLE wakatime (dt VARCHAR(10), metric VARCHAR(10), key TEXT, val INT)");
+          }
+          for (var metric in body.data[0]) {
+            var metric_data = body.data[0][metric];
+            if (Array.isArray(metric_data)) {
+              for (var i=0; i<metric_data.length; i++) {
+                var d = metric_data[i];
+                db.run("INSERT INTO wakatime VALUES (?, ?, ?, ?)", [day, metric, d.name, d.total_seconds]);
+              }
+            } else {
+              if (metric_data === "grand_total") {
+                db.run("INSERT INTO wakatime VALUES (?, ?, ?, ?)", [day, metric, metric_data.name, metric_data.total_seconds]);
+              }
+            }
+          }
+        })
+        db.close();
+      } else {
+        console.log(response);
+        console.log(error);
+      }
+    })
+  };
+
   // Slice arguments to remove defaults
   var args = process.argv.slice(2);
 
@@ -240,6 +266,9 @@ function convertThis() {
     } else if(val === '-w' || val === '-week') {
       var day = todaysDate();
       week(day.week, "Week", day.day);
+    } else if(val === '-s' || val === '--save') {
+      var day = todaysDate();
+      save(day.yesterday);
     } else if(val === '-u' || val === '-user') {
       user();
     } else if(val === '-help') {
